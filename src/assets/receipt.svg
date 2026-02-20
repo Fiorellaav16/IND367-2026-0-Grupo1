@@ -1,0 +1,51 @@
+<svg width="400" height="600" viewBox="0 0 400 600" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="600" fill="white"/>
+  <rect x="20" y="20" width="360" height="560" fill="none" stroke="#eee" stroke-width="1"/>
+  
+  <!-- Header -->
+  <text x="200" y="60" font-family="Courier, monospace" font-size="24" font-weight="bold" text-anchor="middle" fill="black">COMERCIAL EL SOL S.A.</text>
+  <text x="200" y="85" font-family="Courier, monospace" font-size="14" text-anchor="middle" fill="black">R.U.C. 20123456789</text>
+  <text x="200" y="105" font-family="Courier, monospace" font-size="12" text-anchor="middle" fill="black">Av. Las Camelias 123, San Isidro</text>
+  <text x="200" y="125" font-family="Courier, monospace" font-size="12" text-anchor="middle" fill="black">Lima - Perú</text>
+  
+  <line x1="40" y1="150" x2="360" y2="150" stroke="black" stroke-width="1" stroke-dasharray="4"/>
+  
+  <!-- Document Info -->
+  <text x="40" y="180" font-family="Courier, monospace" font-size="14" font-weight="bold" fill="black">BOLETA DE VENTA ELECTRÓNICA</text>
+  <text x="40" y="200" font-family="Courier, monospace" font-size="14" fill="black">B001 - 00045678</text>
+  <text x="40" y="230" font-family="Courier, monospace" font-size="12" fill="black">Fecha: 13/02/2026 14:35</text>
+  <text x="40" y="250" font-family="Courier, monospace" font-size="12" fill="black">Cliente: CARLOS BAZAN</text>
+  
+  <line x1="40" y1="270" x2="360" y2="270" stroke="black" stroke-width="1"/>
+  
+  <!-- Items -->
+  <text x="40" y="290" font-family="Courier, monospace" font-size="12" font-weight="bold" fill="black">DESCRIPCIÓN</text>
+  <text x="360" y="290" font-family="Courier, monospace" font-size="12" font-weight="bold" text-anchor="end" fill="black">TOTAL</text>
+  
+  <text x="40" y="320" font-family="Courier, monospace" font-size="12" fill="black">SUMINISTROS DE OFICINA</text>
+  <text x="360" y="320" font-family="Courier, monospace" font-size="12" text-anchor="end" fill="black">1,280.00</text>
+  
+  <text x="40" y="345" font-family="Courier, monospace" font-size="12" fill="black">PAPEL BOND A4 75GR (5)</text>
+  <text x="360" y="345" font-family="Courier, monospace" font-size="12" text-anchor="end" fill="black">125.00</text>
+  
+  <line x1="40" y1="450" x2="360" y2="450" stroke="black" stroke-width="1" stroke-dasharray="4"/>
+  
+  <!-- Totals -->
+  <text x="200" y="480" font-family="Courier, monospace" font-size="14" font-weight="bold" text-anchor="end" fill="black">TOTAL S/.</text>
+  <text x="360" y="480" font-family="Courier, monospace" font-size="14" font-weight="bold" text-anchor="end" fill="black">1,405.00</text>
+  
+  <!-- Footer -->
+  <text x="200" y="540" font-family="Courier, monospace" font-size="10" text-anchor="middle" fill="black">Representación impresa de la Boleta Electrónica</text>
+  <text x="200" y="555" font-family="Courier, monospace" font-size="10" text-anchor="middle" fill="black">Consulte su documento en: www.elsol.com.pe</text>
+  
+  <!-- Scan effect (subtle noise/lines) -->
+  <rect width="400" height="600" fill="url(#noise)" opacity="0.05" pointer-events="none"/>
+  <defs>
+    <pattern id="noise" width="100" height="100" patternUnits="userSpaceOnUse">
+      <filter id="f">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch"/>
+      </filter>
+      <rect width="100" height="100" filter="url(#f)"/>
+    </pattern>
+  </defs>
+</svg>

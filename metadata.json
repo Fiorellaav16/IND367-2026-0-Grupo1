@@ -1,0 +1,7 @@
+{
+  "name": "CajaChicaPRO",
+  "description": "Aplicación móvil de gestión de caja chica con seguimiento de gastos, reportes y alertas de riesgo.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
