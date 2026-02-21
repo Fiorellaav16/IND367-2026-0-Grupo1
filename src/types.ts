@@ -5,6 +5,7 @@ export enum ExpenseStatus {
   APPROVED = "Aprobado",
   REJECTED = "Rechazado",
   OBSERVED = "Observado",
+  RISK = "Riesgo",
 }
 
 export enum ExpenseCategory {
@@ -44,6 +45,12 @@ export interface Expense {
     status: ExpenseStatus;
     detail?: string;
   }[];
+}
+
+export interface BlacklistedProvider {
+  id: string;
+  name: string;
+  reason: string;
 }
 
 export interface DailySummary {

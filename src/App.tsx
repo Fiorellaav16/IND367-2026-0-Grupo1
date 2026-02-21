@@ -24,12 +24,13 @@ import {
   MoreVertical,
   Calendar,
   Wallet,
-  AlertTriangle
+  AlertTriangle,
+  Send
 } from 'lucide-react';
-import { Expense, ExpenseStatus, ExpenseCategory } from './types';
-import { MOCK_EXPENSES } from './constants';
+import { Expense, ExpenseStatus, ExpenseCategory, BlacklistedProvider } from './types';
+import { MOCK_EXPENSES, BLACKLISTED_PROVIDERS } from './constants';
 
-type View = 'login' | 'dashboard' | 'expenses' | 'new' | 'reports' | 'profile' | 'detail' | 'review' | 'review_detail' | 'close' | 'success' | 'reject' | 'export' | 'generating_close';
+type View = 'login' | 'dashboard' | 'expenses' | 'new' | 'reports' | 'profile' | 'detail' | 'review' | 'review_detail' | 'close' | 'success' | 'reject' | 'export' | 'generating_close' | 'blacklist';
 
 import { 
   LineChart, 
@@ -62,14 +63,51 @@ export default function App() {
     }
   }, [expenses]);
 
-  const handleApprove = (id: string) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: ExpenseStatus.APPROVED } : e));
+  const handleApprove = (id: string, observation?: string) => {
+    setExpenses(prev => prev.map(e => e.id === id ? { 
+      ...e, 
+      status: ExpenseStatus.APPROVED,
+      history: [...(e.history || []), { 
+        date: new Date().toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }), 
+        user: 'Admin User', 
+        amount: e.amount, 
+        status: ExpenseStatus.APPROVED,
+        detail: observation
+      }]
+    } : e));
     setView('success');
   };
 
-  const handleReject = (id: string) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: ExpenseStatus.REJECTED } : e));
+  const handleReject = (id: string, observation: string, riskLevel?: string) => {
+    setExpenses(prev => prev.map(e => e.id === id ? { 
+      ...e, 
+      status: ExpenseStatus.REJECTED,
+      observations: observation,
+      history: [...(e.history || []), { 
+        date: new Date().toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }), 
+        user: 'Admin User', 
+        amount: e.amount, 
+        status: ExpenseStatus.REJECTED,
+        detail: `${riskLevel ? `[Riesgo: ${riskLevel}] ` : ''}${observation}`
+      }]
+    } : e));
     setView('reject');
+  };
+
+  const handleRisk = (id: string, observation: string) => {
+    setExpenses(prev => prev.map(e => e.id === id ? { 
+      ...e, 
+      status: ExpenseStatus.RISK,
+      observations: observation,
+      history: [...(e.history || []), { 
+        date: new Date().toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }), 
+        user: 'Admin User', 
+        amount: e.amount, 
+        status: ExpenseStatus.RISK,
+        detail: observation
+      }]
+    } : e));
+    setView('dashboard');
   };
 
   const addExpense = (newExpense: Omit<Expense, 'id'>) => {
@@ -85,10 +123,11 @@ export default function App() {
       case 'expenses': return <ExpensesListView expenses={expenses} onNavigate={setView} onSelectExpense={(e) => { setSelectedExpense(e); setView('detail'); }} />;
       case 'new': return <NewExpenseView onAdd={addExpense} onBack={() => setView('dashboard')} />;
       case 'reports': return <ReportsView expenses={expenses} />;
-      case 'profile': return <ProfileView role={userRole} onLogout={() => setView('login')} />;
-      case 'detail': return selectedExpense ? <ExpenseDetailView role={userRole} expense={selectedExpense} onBack={() => setView('expenses')} onApprove={() => handleApprove(selectedExpense.id)} onReject={() => handleReject(selectedExpense.id)} /> : null;
-      case 'review': return <ReviewListView expenses={expenses} onBack={() => setView('dashboard')} onApprove={handleApprove} onReject={handleReject} onSelectExpense={(e) => { setSelectedExpense(e); setView('review_detail'); }} />;
-      case 'review_detail': return selectedExpense ? <ExpenseDetailView role={userRole} expense={selectedExpense} onBack={() => setView('review')} onApprove={() => handleApprove(selectedExpense.id)} onReject={() => handleReject(selectedExpense.id)} showActions /> : null;
+      case 'profile': return <ProfileView role={userRole} onLogout={() => setView('login')} onNavigate={setView} />;
+      case 'blacklist': return <BlacklistView onBack={() => setView('profile')} />;
+      case 'detail': return selectedExpense ? <ExpenseDetailView role={userRole} expense={selectedExpense} onBack={() => setView('expenses')} onApprove={(obs) => handleApprove(selectedExpense.id, obs)} onReject={(obs, risk) => handleReject(selectedExpense.id, obs, risk)} onRisk={(obs) => handleRisk(selectedExpense.id, obs)} /> : null;
+      case 'review': return <ReviewListView expenses={expenses} onBack={() => setView('dashboard')} onApprove={(id) => handleApprove(id)} onReject={(id) => handleReject(id, 'Rechazado desde revisión')} onSelectExpense={(e) => { setSelectedExpense(e); setView('review_detail'); }} />;
+      case 'review_detail': return selectedExpense ? <ExpenseDetailView role={userRole} expense={selectedExpense} onBack={() => setView('review')} onApprove={(obs) => handleApprove(selectedExpense.id, obs)} onReject={(obs, risk) => handleReject(selectedExpense.id, obs, risk)} onRisk={(obs) => handleRisk(selectedExpense.id, obs)} showActions /> : null;
       case 'close': return <DailyCloseView expenses={expenses} onBack={() => setView('dashboard')} onGenerate={() => setView('generating_close')} />;
       case 'generating_close': return <GeneratingCloseView onComplete={() => setView('export')} />;
       case 'export': return <ExportView onBack={() => setView('dashboard')} onContinue={() => setView('dashboard')} />;
@@ -185,6 +224,7 @@ function DashboardView({ role, onRoleChange, expenses, onNavigate, onSelectExpen
   const pending = expenses.filter(e => e.status === ExpenseStatus.PENDING);
   const approved = expenses.filter(e => e.status === ExpenseStatus.APPROVED);
   const rejected = expenses.filter(e => e.status === ExpenseStatus.REJECTED);
+  const risk = expenses.filter(e => e.status === ExpenseStatus.RISK);
   const totalToday = expenses.reduce((acc, curr) => acc + curr.amount, 0);
   const limit = 2000;
   const balance = limit - totalToday;
@@ -280,7 +320,7 @@ function DashboardView({ role, onRoleChange, expenses, onNavigate, onSelectExpen
           <SummaryCard icon={<Wallet size={20} />} label="Gastos del día" value={`S/. ${totalToday.toLocaleString()}`} subValue={`De S/. ${limit.toLocaleString()} límite`} color="blue" />
           <SummaryCard icon={<Clock size={20} />} label="Pendientes" value={pending.length.toString()} subValue={`${pending.length} por revisar`} color="amber" />
           <SummaryCard icon={<CheckCircle2 size={20} />} label="Aprobados" value={approved.length.toString()} subValue="Hoy" color="emerald" />
-          <SummaryCard icon={<XCircle size={20} />} label="Rechazados" value={rejected.length.toString()} subValue="Requieren seguimiento" color="red" />
+          <SummaryCard icon={<AlertCircle size={20} />} label="Riesgo" value={risk.length.toString()} subValue="Requieren atención" color="rose" />
         </div>
       </section>
 
@@ -324,6 +364,7 @@ function SummaryCard({ icon, label, value, subValue, color }: { icon: ReactNode,
     amber: 'bg-amber-50 text-amber-600',
     emerald: 'bg-emerald-50 text-emerald-600',
     red: 'bg-red-50 text-red-600',
+    rose: 'bg-rose-50 text-rose-600',
     white: 'bg-white/20 text-white border border-white/30'
   };
 
@@ -345,6 +386,7 @@ const ExpenseCard: React.FC<{ expense: Expense, onClick: () => void }> = ({ expe
     [ExpenseStatus.APPROVED]: 'bg-emerald-100 text-emerald-700',
     [ExpenseStatus.REJECTED]: 'bg-red-100 text-red-700',
     [ExpenseStatus.OBSERVED]: 'bg-purple-100 text-purple-700',
+    [ExpenseStatus.RISK]: 'bg-rose-100 text-rose-700',
   };
 
   const statusBorder = {
@@ -352,6 +394,7 @@ const ExpenseCard: React.FC<{ expense: Expense, onClick: () => void }> = ({ expe
     [ExpenseStatus.APPROVED]: 'bg-emerald-400',
     [ExpenseStatus.REJECTED]: 'bg-red-400',
     [ExpenseStatus.OBSERVED]: 'bg-purple-400',
+    [ExpenseStatus.RISK]: 'bg-rose-500',
   };
 
   return (
@@ -390,7 +433,7 @@ const ExpenseCard: React.FC<{ expense: Expense, onClick: () => void }> = ({ expe
 }
 
 function ReviewListView({ expenses, onBack, onApprove, onReject, onSelectExpense }: { expenses: Expense[], onBack: () => void, onApprove: (id: string) => void, onReject: (id: string) => void, onSelectExpense: (e: Expense) => void }) {
-  const [filter, setFilter] = useState<'Riesgo' | 'Pendientes' | 'Aprobados'>('Pendientes');
+  const [filter, setFilter] = useState<ExpenseStatus | 'Todos'>(ExpenseStatus.PENDING);
 
   return (
     <div className="flex flex-col min-h-full bg-white pb-32">
@@ -402,18 +445,19 @@ function ReviewListView({ expenses, onBack, onApprove, onReject, onSelectExpense
       <div className="p-6 space-y-6">
         <div className="space-y-3">
           <p className="text-slate-500 font-bold text-sm">Filtro activos</p>
-          <div className="flex gap-3">
-            <FilterChip label="Riesgo" active={filter === 'Riesgo'} color="red" onClick={() => setFilter('Riesgo')} />
-            <FilterChip label="Pendientes" active={filter === 'Pendientes'} color="amber" onClick={() => setFilter('Pendientes')} />
-            <FilterChip label="Aprobados" active={filter === 'Aprobados'} color="emerald" onClick={() => setFilter('Aprobados')} />
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+            <FilterChip label="Pendientes" active={filter === ExpenseStatus.PENDING} color="amber" onClick={() => setFilter(ExpenseStatus.PENDING)} />
+            <FilterChip label="Riesgo" active={filter === ExpenseStatus.RISK} color="red" onClick={() => setFilter(ExpenseStatus.RISK)} />
+            <FilterChip label="Aprobados" active={filter === ExpenseStatus.APPROVED} color="emerald" onClick={() => setFilter(ExpenseStatus.APPROVED)} />
+            <FilterChip label="Rechazados" active={filter === ExpenseStatus.REJECTED} color="slate" onClick={() => setFilter(ExpenseStatus.REJECTED)} />
+            <FilterChip label="Todos" active={filter === 'Todos'} color="blue" onClick={() => setFilter('Todos')} />
           </div>
         </div>
 
         <div className="space-y-4">
           {expenses.filter(e => {
-            if (filter === 'Pendientes') return e.status === ExpenseStatus.PENDING;
-            if (filter === 'Aprobados') return e.status === ExpenseStatus.APPROVED;
-            return true;
+            if (filter === 'Todos') return true;
+            return e.status === filter;
           }).map(expense => (
             <div key={expense.id} className="space-y-3">
               <ExpenseCard expense={expense} onClick={() => onSelectExpense(expense)} />
@@ -435,7 +479,9 @@ function FilterChip({ label, active, color, onClick }: { label: string, active: 
   const colors: Record<string, string> = {
     red: active ? 'bg-red-500 text-white' : 'bg-red-100 text-red-600',
     amber: active ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-600',
-    emerald: active ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-600'
+    emerald: active ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-600',
+    slate: active ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-600',
+    blue: active ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600',
   };
 
   return (
@@ -574,16 +620,31 @@ function FormField({ label, children, required }: { label: string, children: Rea
   );
 }
 
-function ExpenseDetailView({ role, expense, onBack, onApprove, onReject, showActions }: { role: string, expense: Expense, onBack: () => void, onApprove: () => void, onReject: () => void, showActions?: boolean }) {
+function ExpenseDetailView({ role, expense, onBack, onApprove, onReject, onRisk, showActions }: { role: string, expense: Expense, onBack: () => void, onApprove: (obs?: string) => void, onReject: (obs: string, risk: string) => void, onRisk: (obs: string) => void, showActions?: boolean }) {
   const [isZoomed, setIsZoomed] = useState(false);
+  const [showActionForm, setShowActionForm] = useState<'approve' | 'reject' | 'risk' | null>(null);
+  const [observation, setObservation] = useState('');
+  const [riskLevel, setRiskLevel] = useState('Medio');
+
   const statusColors = {
     [ExpenseStatus.PENDING]: 'bg-amber-500 text-white',
     [ExpenseStatus.APPROVED]: 'bg-emerald-500 text-white',
     [ExpenseStatus.REJECTED]: 'bg-red-500 text-white',
     [ExpenseStatus.OBSERVED]: 'bg-cyan-500 text-white',
+    [ExpenseStatus.RISK]: 'bg-rose-600 text-white',
   };
 
   const canApprove = (role === 'admin' || role === 'jefe') && showActions;
+
+  const isBlacklisted = BLACKLISTED_PROVIDERS.some(p => p.name === expense.provider);
+
+  const handleAction = () => {
+    if (showActionForm === 'approve') onApprove(observation);
+    if (showActionForm === 'reject') onReject(observation, riskLevel);
+    if (showActionForm === 'risk') onRisk(observation);
+    setShowActionForm(null);
+    setObservation('');
+  };
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden relative">
@@ -678,29 +739,43 @@ function ExpenseDetailView({ role, expense, onBack, onApprove, onReject, showAct
           <div className="space-y-2 text-sm">
             <DataRow label="Solicitante" value={expense.user} />
             <DataRow label="Área" value={expense.area || 'Mantenimiento'} />
-            <DataRow label="Categoría" value="Repuestos/Wi-Fi" />
-            <DataRow label="Categoría" value="Repuestos/Wi-Fi" />
-            <DataRow label="Método" value="Compra de conectores RJ45 + canaleta" />
+            <DataRow label="Proveedor" value={expense.provider || 'No especificado'} />
+            <DataRow label="Categoría" value={expense.category} />
             <DataRow label="Monto registrado" value={`${expense.currency}${expense.amount}`} />
             <DataRow label="Monto del comprobante" value={`${expense.currency}${expense.amount}`} verified />
+          </div>
+
+          <div className={`p-4 rounded-2xl flex items-center gap-3 ${isBlacklisted ? 'bg-red-50 border border-red-100 text-red-700' : 'bg-emerald-50 border border-emerald-100 text-emerald-700'}`}>
+            {isBlacklisted ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+            <p className="text-xs font-bold">
+              {isBlacklisted 
+                ? "Alerta: Este proveedor se encuentra en la lista negra" 
+                : "Proveedor frecuente confiable"}
+            </p>
           </div>
         </section>
 
         <section className="space-y-4 pb-12">
           <h4 className="font-bold text-lg uppercase border-b border-slate-200 pb-2">Historial</h4>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {expense.history?.map((h, i) => (
-              <div key={i} className="flex justify-between items-center text-xs border-b border-slate-50 pb-2 last:border-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400">{h.date}</span>
-                  <ArrowRight size={12} className="text-slate-400" />
-                  <span className="font-bold text-slate-700">{h.user}</span>
-                  <span className="text-slate-900 font-bold">• {expense.currency}{h.amount}</span>
+              <div key={i} className="border-b border-slate-50 pb-3 last:border-0 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">{h.date}</span>
+                    <ArrowRight size={12} className="text-slate-400" />
+                    <span className="font-bold text-slate-700">{h.user}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {h.status === ExpenseStatus.RISK && <AlertCircle size={14} className="text-rose-500" />}
+                    <span className={`${h.status === ExpenseStatus.APPROVED ? 'text-emerald-500' : h.status === ExpenseStatus.RISK ? 'text-rose-600' : h.status === ExpenseStatus.REJECTED ? 'text-red-500' : 'text-slate-500'} font-bold`}>{h.status}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {h.status === ExpenseStatus.OBSERVED && <AlertCircle size={14} className="text-amber-500" />}
-                  <span className={`${h.status === ExpenseStatus.APPROVED ? 'text-emerald-500' : h.status === ExpenseStatus.OBSERVED ? 'bg-amber-400 text-slate-900 px-2 rounded' : 'text-slate-500'} font-bold`}>{h.status}</span>
-                </div>
+                {h.detail && (
+                  <div className="bg-slate-50 p-2 rounded-lg text-[11px] text-slate-600 italic">
+                    {h.detail}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -708,11 +783,64 @@ function ExpenseDetailView({ role, expense, onBack, onApprove, onReject, showAct
       </div>
 
       {canApprove && expense.status === ExpenseStatus.PENDING && (
-        <div className="p-6 bg-slate-50 border-t border-slate-200 flex gap-4 shrink-0">
-          <button onClick={onApprove} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">Aprobar</button>
-          <button onClick={onReject} className="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-transform">Rechazar</button>
+        <div className="p-6 bg-slate-50 border-t border-slate-200 space-y-4 shrink-0">
+          {showActionForm ? (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <h5 className="font-bold text-sm capitalize">Justificación: {showActionForm}</h5>
+                <button onClick={() => setShowActionForm(null)} className="text-slate-400"><XCircle size={20} /></button>
+              </div>
+              {showActionForm === 'reject' && (
+                <div className="flex gap-2 mb-2">
+                  {['Bajo', 'Medio', 'Alto'].map(lvl => (
+                    <button 
+                      key={lvl} 
+                      onClick={() => setRiskLevel(lvl)}
+                      className={`flex-1 py-1 rounded-lg text-[10px] font-bold border ${riskLevel === lvl ? 'bg-red-500 text-white border-red-500' : 'bg-white text-slate-500 border-slate-200'}`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea 
+                placeholder="Ingrese una observación..." 
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                rows={3}
+                value={observation}
+                onChange={(e) => setObservation(e.target.value)}
+              />
+              <button 
+                onClick={handleAction}
+                disabled={showActionForm !== 'approve' && !observation}
+                className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-600/20 active:scale-95 transition-transform disabled:bg-slate-300 disabled:shadow-none"
+              >
+                Confirmar {showActionForm}
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => setShowActionForm('approve')} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">Aprobar</button>
+              <button onClick={() => setShowActionForm('risk')} className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold text-xs shadow-lg shadow-rose-600/20 active:scale-95 transition-transform">Riesgo</button>
+              <button onClick={() => setShowActionForm('reject')} className="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold text-xs shadow-lg shadow-red-500/20 active:scale-95 transition-transform">Rechazar</button>
+            </div>
+          )}
         </div>
       )}
+
+      <div className="p-4 bg-white border-t border-slate-100 shrink-0 pb-8 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)]">
+        <div className="flex gap-3">
+          <button className="flex-1 bg-emerald-50 border border-emerald-100 text-emerald-700 py-3 rounded-xl font-bold text-[11px] active:scale-95 transition-all">
+            Solicitar comentario
+          </button>
+          <button className="flex-1 bg-emerald-50 border border-emerald-100 text-emerald-700 py-3 rounded-xl font-bold text-[11px] active:scale-95 transition-all">
+            Pedir nueva foto
+          </button>
+          <button className="w-12 h-12 bg-emerald-500 text-white flex items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+            <Send size={20} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -730,17 +858,62 @@ function DataRow({ label, value, verified }: { label: string, value: string, ver
 }
 
 function ReportsView({ expenses }: { expenses: Expense[] }) {
-  const total = expenses.reduce((acc, curr) => acc + curr.amount, 0);
-  const observedCount = expenses.filter(e => e.status === ExpenseStatus.OBSERVED).length;
-  const observedPercent = expenses.length > 0 ? ((observedCount / expenses.length) * 100).toFixed(1) : "0";
+  const [period, setPeriod] = useState<'Semana' | 'Mes' | '3 meses' | 'Año'>('Mes');
+
+  // Helper to filter expenses by date
+  const getFilteredExpenses = () => {
+    const now = new Date();
+    return expenses.filter(e => {
+      const expenseDate = new Date(e.date);
+      const diffTime = Math.abs(now.getTime() - expenseDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (period === 'Semana') return diffDays <= 7;
+      if (period === 'Mes') return diffDays <= 30;
+      if (period === '3 meses') return diffDays <= 90;
+      if (period === 'Año') return diffDays <= 365;
+      return true;
+    });
+  };
+
+  const filteredExpenses = getFilteredExpenses();
+  const total = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+  const observedCount = filteredExpenses.filter(e => e.status === ExpenseStatus.OBSERVED).length;
+  const observedPercent = filteredExpenses.length > 0 ? ((observedCount / filteredExpenses.length) * 100).toFixed(1) : "0";
   
-  const chartData = [
-    { name: 'Manten.', value: expenses.filter(e => e.category === ExpenseCategory.MAINTENANCE).reduce((a,c)=>a+c.amount,0) || 500 },
-    { name: 'Operac.', value: expenses.filter(e => e.category === ExpenseCategory.TRANSPORT).reduce((a,c)=>a+c.amount,0) || 300 },
-    { name: 'Oficina', value: expenses.filter(e => e.category === ExpenseCategory.OFFICE_SUPPLIES).reduce((a,c)=>a+c.amount,0) || 200 },
-    { name: 'Comida', value: expenses.filter(e => e.category === ExpenseCategory.FOOD).reduce((a,c)=>a+c.amount,0) || 150 },
-    { name: 'Otros', value: 100 },
-  ];
+  // Generate chart data based on period
+  const getChartData = () => {
+    const categories = [
+      { name: 'Manten.', cat: ExpenseCategory.MAINTENANCE, base: 500 },
+      { name: 'Operac.', cat: ExpenseCategory.TRANSPORT, base: 300 },
+      { name: 'Oficina', cat: ExpenseCategory.OFFICE_SUPPLIES, base: 200 },
+      { name: 'Comida', cat: ExpenseCategory.FOOD, base: 150 },
+      { name: 'Otros', cat: null, base: 100 },
+    ];
+
+    // Multiplier for different periods to make it look dynamic
+    const multipliers: Record<string, number> = {
+      'Semana': 0.25,
+      'Mes': 1,
+      '3 meses': 2.8,
+      'Año': 11.5
+    };
+
+    const m = multipliers[period];
+
+    return categories.map(c => {
+      const realValue = c.cat 
+        ? filteredExpenses.filter(e => e.category === c.cat).reduce((a, curr) => a + curr.amount, 0)
+        : 0;
+      
+      // If no real data, use base * multiplier with some randomness
+      const value = realValue > 0 ? realValue : Math.round(c.base * m * (0.8 + Math.random() * 0.4));
+      
+      return { name: c.name, value };
+    });
+  };
+
+  const chartData = getChartData();
 
   return (
     <div className="p-6 pb-32 space-y-8 bg-white min-h-full">
@@ -750,10 +923,10 @@ function ReportsView({ expenses }: { expenses: Expense[] }) {
       </header>
 
       <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-        <TabChip label="Semana" />
-        <TabChip label="Mes" active />
-        <TabChip label="3 meses" />
-        <TabChip label="Año" />
+        <TabChip label="Semana" active={period === 'Semana'} onClick={() => setPeriod('Semana')} />
+        <TabChip label="Mes" active={period === 'Mes'} onClick={() => setPeriod('Mes')} />
+        <TabChip label="3 meses" active={period === '3 meses'} onClick={() => setPeriod('3 meses')} />
+        <TabChip label="Año" active={period === 'Año'} onClick={() => setPeriod('Año')} />
       </div>
 
       <div className="flex gap-2">
@@ -763,8 +936,8 @@ function ReportsView({ expenses }: { expenses: Expense[] }) {
 
       <div className="grid grid-cols-2 gap-4">
         <StatCard label="Total gastado" value={`S/. ${total.toLocaleString()}`} />
-        <StatCard label="N° de gastos" value={expenses.length.toString()} />
-        <StatCard label="Promedio" value={`S/. ${expenses.length > 0 ? Math.round(total / expenses.length).toLocaleString() : '0'}`} />
+        <StatCard label="N° de gastos" value={filteredExpenses.length.toString()} />
+        <StatCard label="Promedio" value={`S/. ${filteredExpenses.length > 0 ? Math.round(total / filteredExpenses.length).toLocaleString() : '0'}`} />
         <StatCard label="Observados" value={observedCount.toString()} sub={`${observedPercent}%`} />
       </div>
 
@@ -813,9 +986,9 @@ function ReportsView({ expenses }: { expenses: Expense[] }) {
           <button className="px-4 py-2 text-slate-500 font-bold text-sm">Por persona</button>
         </div>
         <div className="space-y-4">
-          <AreaRankItem rank={1} name="Administración" amount={`S/. ${expenses.filter(e => e.area === 'Administración').reduce((a,c)=>a+c.amount,0).toLocaleString()}`} count={expenses.filter(e => e.area === 'Administración').length} percent="-" />
-          <AreaRankItem rank={2} name="Ventas" amount={`S/. ${expenses.filter(e => e.area === 'Ventas').reduce((a,c)=>a+c.amount,0).toLocaleString()}`} count={expenses.filter(e => e.area === 'Ventas').length} percent="-" />
-          <AreaRankItem rank={3} name="Proyectos" amount={`S/. ${expenses.filter(e => e.area === 'Proyectos').reduce((a,c)=>a+c.amount,0).toLocaleString()}`} count={expenses.filter(e => e.area === 'Proyectos').length} percent="-" />
+          <AreaRankItem rank={1} name="Administración" amount={`S/. ${filteredExpenses.filter(e => e.area === 'Administración').reduce((a,c)=>a+c.amount,0).toLocaleString()}`} count={filteredExpenses.filter(e => e.area === 'Administración').length} percent="-" />
+          <AreaRankItem rank={2} name="Ventas" amount={`S/. ${filteredExpenses.filter(e => e.area === 'Ventas').reduce((a,c)=>a+c.amount,0).toLocaleString()}`} count={filteredExpenses.filter(e => e.area === 'Ventas').length} percent="-" />
+          <AreaRankItem rank={3} name="Proyectos" amount={`S/. ${filteredExpenses.filter(e => e.area === 'Proyectos').reduce((a,c)=>a+c.amount,0).toLocaleString()}`} count={filteredExpenses.filter(e => e.area === 'Proyectos').length} percent="-" />
         </div>
       </div>
 
@@ -869,9 +1042,12 @@ function ProviderItem({ name, ruc, amount, count }: { name: string, ruc: string,
   );
 }
 
-function TabChip({ label, active }: { label: string, active?: boolean }) {
+function TabChip({ label, active, onClick }: { label: string, active?: boolean, onClick?: () => void }) {
   return (
-    <button className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${active ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
+    <button 
+      onClick={onClick}
+      className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${active ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}
+    >
       {label}
     </button>
   );
@@ -910,7 +1086,7 @@ function RepeatedItem({ label, count, area }: { label: string, count: number, ar
   );
 }
 
-function ProfileView({ role, onLogout }: { role: string, onLogout: () => void }) {
+function ProfileView({ role, onLogout, onNavigate }: { role: string, onLogout: () => void, onNavigate: (v: View) => void }) {
   return (
     <div className="min-h-full bg-emerald-500 flex flex-col p-8 pb-32 text-white overflow-y-auto">
       <div className="flex flex-col items-center mt-12 mb-12">
@@ -926,7 +1102,7 @@ function ProfileView({ role, onLogout }: { role: string, onLogout: () => void })
       <div className="space-y-4 mb-12">
         <ProfileButton label="Usuarios" />
         <ProfileButton label="Politicas" />
-        <ProfileButton label="Lista negra de proveedores" />
+        <ProfileButton label="Lista negra de proveedores" onClick={() => onNavigate('blacklist')} />
         <ProfileButton label="Configuración de cuenta" />
         <ProfileButton label="Notificaciones" />
         <ProfileButton label="Ayuda y soporte" />
@@ -941,11 +1117,46 @@ function ProfileView({ role, onLogout }: { role: string, onLogout: () => void })
   );
 }
 
-function ProfileButton({ label }: { label: string }) {
+function ProfileButton({ label, onClick }: { label: string, onClick?: () => void }) {
   return (
-    <button className="w-full bg-emerald-400/30 border border-white/20 text-white py-4 rounded-2xl font-bold text-lg active:bg-emerald-400/50 transition-colors shadow-lg">
+    <button onClick={onClick} className="w-full bg-emerald-400/30 border border-white/20 text-white py-4 rounded-2xl font-bold text-lg active:bg-emerald-400/50 transition-colors shadow-lg">
       {label}
     </button>
+  );
+}
+
+function BlacklistView({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="min-h-full bg-white flex flex-col">
+      <header className="bg-zinc-950 text-white p-6 pt-12 rounded-b-[32px] flex items-center gap-4 shrink-0">
+        <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ChevronLeft size={24} /></button>
+        <h2 className="text-xl font-bold uppercase tracking-widest">Lista Negra</h2>
+      </header>
+
+      <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
+        <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex gap-3 items-start mb-4">
+          <AlertTriangle className="text-red-500 shrink-0" size={24} />
+          <p className="text-red-800 text-sm font-medium">
+            Los proveedores en esta lista han sido restringidos por incumplimiento de políticas o irregularidades.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {BLACKLISTED_PROVIDERS.map(provider => (
+            <div key={provider.id} className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm space-y-2">
+              <div className="flex justify-between items-start">
+                <h3 className="font-bold text-slate-900 text-lg">{provider.name}</h3>
+                <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Bloqueado</span>
+              </div>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                <span className="font-bold text-slate-700">Motivo: </span>
+                {provider.reason}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

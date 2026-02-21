@@ -1,4 +1,10 @@
-import { Expense, ExpenseStatus, ExpenseCategory } from "./types";
+import { Expense, ExpenseStatus, ExpenseCategory, BlacklistedProvider } from "./types";
+
+export const BLACKLISTED_PROVIDERS: BlacklistedProvider[] = [
+  { id: "1", name: "Servicios Fantasmas SAC", reason: "Facturación de servicios no realizados detectada en auditoría." },
+  { id: "2", name: "Insumos Pro", reason: "Calidad de productos por debajo de los estándares requeridos." },
+  { id: "3", name: "Transportes Veloz", reason: "Múltiples reportes de retrasos críticos y falta de comprobantes válidos." },
+];
 
 export const MOCK_EXPENSES: Expense[] = [
   {
